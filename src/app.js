@@ -1,3 +1,4 @@
+const path = require('path');
 const express = require('express');
 const multer = require('multer');
 const config = require('./config');
@@ -6,11 +7,20 @@ const fileRoutes = require('./routes/fileRoutes');
 const shareRoutes = require('./routes/shareRoutes');
 const { accessShare } = require('./controllers/shareController');
 
+const { requestLogger } = require('./middleware/requestLogger');
+const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
+
 const app = express();
+
+// Request correlation ID and structured request logger (V0-T13, LOG-1, LOG-2)
+app.use(requestLogger);
 
 // Standard middleware
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// Serve static UI assets (V0-T12)
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Health check endpoint reporting service & DB status (V0-T01, V0-T02)
 app.get('/health', (req, res) => {
@@ -32,34 +42,11 @@ app.use('/api/shares', shareRoutes);
 // Ephemeral Share Access Endpoint (V0-T11, TOK-5)
 app.get('/s/:shortCode', accessShare);
 
-// Error Handling Middleware (catching Multer limits, body-parser limits, and general errors)
-app.use((err, req, res, next) => {
-  if (err instanceof multer.MulterError || err.name === 'MulterError') {
-    if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(413).json({
-        error: `File size exceeds the limit of ${config.maxFileSize} bytes`,
-      });
-    }
-    return res.status(400).json({
-      error: err.message,
-    });
-  }
+// 404 handler for undefined routes (V0-T13)
+app.use(notFoundHandler);
 
-  if (err.type === 'entity.too.large' || err.status === 413) {
-    return res.status(413).json({
-      error: `Text content exceeds maximum limit of ${config.maxTextSize} bytes`,
-    });
-  }
-
-  if (err) {
-    const status = err.status || 500;
-    return res.status(status).json({
-      error: err.message || 'Internal server error',
-    });
-  }
-
-  next();
-});
+// Centralized Error Handling Middleware (V0-T13)
+app.use(errorHandler);
 
 module.exports = app;
 

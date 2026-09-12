@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DropVault — Developer Secret & File Vault</title>
+  <meta name="description" content="Encrypted, self-destructing file and secret sharing platform for developers. Protected with AES-256-GCM.">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <div class="header-container">
+      <a href="/" class="brand">
+        <div class="brand-icon">⚿</div>
+        <span class="brand-title">DropVault</span>
+        <span class="brand-badge">AES-256-GCM</span>
+      </a>
+      <div class="header-links">
+        <a href="/access.html" class="nav-link">Retrieve Secret</a>
+        <a href="/health" target="_blank" class="nav-link">System Health</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <h1>Secure Ephemeral Vault</h1>
+      <p>Share sensitive tokens, configurations, and files with cryptographic zero-retention and optional self-destruct.</p>
+    </section>
+
+    <!-- Error / Success Alert -->
+    <div id="alertBox" class="alert" role="alert"></div>
+
+    <!-- Main Vault Input Panel -->
+    <section class="vault-panel">
+      <!-- Mode Tabs -->
+      <div class="tabs" role="tablist">
+        <button id="tabFileBtn" class="tab-btn active" role="tab" aria-selected="true" aria-controls="tabFile">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+          Upload File
+        </button>
+        <button id="tabTextBtn" class="tab-btn" role="tab" aria-selected="false" aria-controls="tabText">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+          Paste Secret / Text
+        </button>
+      </div>
+
+      <!-- Tab 1: File Upload Pane -->
+      <div id="tabFile" class="tab-pane active" role="tabpanel">
+        <div id="dropzone" class="dropzone" tabindex="0">
+          <div class="dropzone-icon">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+          </div>
+          <div class="dropzone-text">Drop file here or <span style="color: var(--accent); text-decoration: underline;">browse system</span></div>
+          <div class="dropzone-hint">Encrypted server-side using AES-256-GCM. Maximum size: 10 MB.</div>
+          <input type="file" id="fileInput" class="file-input">
+        </div>
+
+        <div id="filePreview" class="file-preview">
+          <div class="file-info">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+            <div>
+              <div id="filePreviewName" class="file-meta-name">filename.ext</div>
+              <div id="filePreviewSize" class="file-meta-size">0 KB</div>
+            </div>
+          </div>
+          <button type="button" id="btnRemoveFile" class="btn-remove-file">Remove</button>
+        </div>
+      </div>
+
+      <!-- Tab 2: Text Secret Pane -->
+      <div id="tabText" class="tab-pane" role="tabpanel">
+        <div class="textarea-wrapper">
+          <textarea id="secretText" class="secret-textarea" placeholder="Paste sensitive tokens, API keys, private certificates, .env files, or secret text here..." spellcheck="false"></textarea>
+          <div class="textarea-footer">
+            <span id="charCount">0 characters</span>
+            <span id="lineCount">1 line</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Security & Expiration Options -->
+      <div class="options-section">
+        <div class="option-group">
+          <label for="ttlSelect" class="option-label">Expires In:</label>
+          <select id="ttlSelect" class="select-ttl">
+            <option value="3600" selected>1 Hour</option>
+            <option value="21600">6 Hours</option>
+            <option value="86400">24 Hours</option>
+            <option value="604800">7 Days</option>
+            <option value="">Never (Manual / Burn)</option>
+          </select>
+        </div>
+
+        <div class="option-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="oneTimeCheck" checked>
+            <span>Burn after reading (destroy upon first download)</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Action Button -->
+      <div class="action-section">
+        <button type="button" id="btnCreateVault" class="btn-primary">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+          <span id="btnCreateText">Encrypt & Generate Link</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Share Generated Card -->
+    <section id="resultCard" class="result-card">
+      <div class="result-header">
+        <div class="result-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          Vault Share Ready
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <span class="status-tag secure">AES-256-GCM</span>
+          <span id="resultBurnBadge" class="status-tag burn">One-Time Burn</span>
+        </div>
+      </div>
+
+      <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 8px;">Direct Share Link (Instant Download):</p>
+      <div class="code-field">
+        <span id="resultShareUrl" class="code-text">https://...</span>
+        <button type="button" id="btnCopyUrl" class="btn-copy">Copy Link</button>
+      </div>
+
+      <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 8px;">Web Retrieval Link (Inspect in browser):</p>
+      <div class="code-field">
+        <span id="resultAccessUrl" class="code-text">https://...</span>
+        <button type="button" id="btnCopyAccessUrl" class="btn-copy">Copy Link</button>
+      </div>
+
+      <div class="cli-snippet">
+        <span class="cli-label">TERMINAL DOWNLOAD (CURL):</span>
+        <div class="cli-row">
+          <span id="resultCurlCommand" class="cli-command">curl -fOJ ...</span>
+          <button type="button" id="btnCopyCurl" class="btn-copy">Copy CLI</button>
+        </div>
+      </div>
+
+      <div class="result-meta">
+        <span id="resultExpiresMeta">Expires: in 1 hour</span>
+        <span id="resultTypeMeta">Type: file</span>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    DropVault v0.1 • Zero-Knowledge Architecture • Clean Ephemeral Storage
+  </footer>
+
+  <script>
+    // Tab switching logic
+    const tabFileBtn = document.getElementById('tabFileBtn');
+    const tabTextBtn = document.getElementById('tabTextBtn');
+    const tabFile = document.getElementById('tabFile');
+    const tabText = document.getElementById('tabText');
+    let activeTab = 'file';
+
+    function setActiveTab(tab) {
+      activeTab = tab;
+      if (tab === 'file') {
+        tabFileBtn.classList.add('active');
+        tabFileBtn.setAttribute('aria-selected', 'true');
+        tabTextBtn.classList.remove('active');
+        tabTextBtn.setAttribute('aria-selected', 'false');
+        tabFile.classList.add('active');
+        tabText.classList.remove('active');
+      } else {
+        tabTextBtn.classList.add('active');
+        tabTextBtn.setAttribute('aria-selected', 'true');
+        tabFileBtn.classList.remove('active');
+        tabFileBtn.setAttribute('aria-selected', 'false');
+        tabText.classList.add('active');
+        tabFile.classList.remove('active');
+      }
+    }
+
+    tabFileBtn.addEventListener('click', () => setActiveTab('file'));
+    tabTextBtn.addEventListener('click', () => setActiveTab('text'));
+
+    // File Dropzone Handling
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+    const filePreview = document.getElementById('filePreview');
+    const filePreviewName = document.getElementById('filePreviewName');
+    const filePreviewSize = document.getElementById('filePreviewSize');
+    const btnRemoveFile = document.getElementById('btnRemoveFile');
+    let selectedFile = null;
+
+    dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        fileInput.click();
+      }
+    });
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropzone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropzone.classList.add('dragover');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropzone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropzone.classList.remove('dragover');
+      });
+    });
+
+    dropzone.addEventListener('drop', (e) => {
+      if (e.dataTransfer && e.dataTransfer.files.length > 0) {
+        handleFileSelect(e.dataTransfer.files[0]);
+      }
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files.length > 0) {
+        handleFileSelect(e.target.files[0]);
+      }
+    });
+
+    function formatBytes(bytes) {
+      if (bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    function handleFileSelect(file) {
+      selectedFile = file;
+      filePreviewName.textContent = file.name;
+      filePreviewSize.textContent = formatBytes(file.size);
+      filePreview.classList.add('visible');
+      dropzone.style.display = 'none';
+      clearAlert();
+    }
+
+    btnRemoveFile.addEventListener('click', () => {
+      selectedFile = null;
+      fileInput.value = '';
+      filePreview.classList.remove('visible');
+      dropzone.style.display = 'block';
+    });
+
+    // Textarea Line & Char Counter
+    const secretText = document.getElementById('secretText');
+    const charCount = document.getElementById('charCount');
+    const lineCount = document.getElementById('lineCount');
+
+    secretText.addEventListener('input', () => {
+      const text = secretText.value;
+      charCount.textContent = `${text.length} character${text.length === 1 ? '' : 's'}`;
+      const lines = text ? text.split('\n').length : 1;
+      lineCount.textContent = `${lines} line${lines === 1 ? '' : 's'}`;
+    });
+
+    // Alerts
+    const alertBox = document.getElementById('alertBox');
+    function showAlert(message, type = 'danger') {
+      alertBox.textContent = message;
+      alertBox.className = `alert alert-${type} visible`;
+      alertBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    function clearAlert() {
+      alertBox.className = 'alert';
+      alertBox.textContent = '';
+    }
+
+    // Vault Submission
+    const btnCreateVault = document.getElementById('btnCreateVault');
+    const btnCreateText = document.getElementById('btnCreateText');
+    const ttlSelect = document.getElementById('ttlSelect');
+    const oneTimeCheck = document.getElementById('oneTimeCheck');
+    const resultCard = document.getElementById('resultCard');
+    const resultShareUrl = document.getElementById('resultShareUrl');
+    const resultAccessUrl = document.getElementById('resultAccessUrl');
+    const resultCurlCommand = document.getElementById('resultCurlCommand');
+    const resultBurnBadge = document.getElementById('resultBurnBadge');
+    const resultExpiresMeta = document.getElementById('resultExpiresMeta');
+    const resultTypeMeta = document.getElementById('resultTypeMeta');
+
+    btnCreateVault.addEventListener('click', async () => {
+      clearAlert();
+      resultCard.classList.remove('visible');
+
+      let fileId = null;
+      let shareType = 'file';
+
+      btnCreateVault.disabled = true;
+      btnCreateText.textContent = 'Encrypting & Storing...';
+
+      try {
+        if (activeTab === 'file') {
+          if (!selectedFile) {
+            showAlert('Please choose or drop a file first.');
+            btnCreateVault.disabled = false;
+            btnCreateText.textContent = 'Encrypt & Generate Link';
+            return;
+          }
+
+          const formData = new FormData();
+          formData.append('file', selectedFile);
+
+          const uploadRes = await fetch('/api/files', {
+            method: 'POST',
+            body: formData,
+          });
+
+          const uploadData = await uploadRes.json();
+          if (!uploadRes.ok) {
+            throw new Error(uploadData.error || 'Failed to upload file');
+          }
+          fileId = uploadData.fileId;
+          shareType = 'file';
+        } else {
+          const content = secretText.value.trim();
+          if (!content) {
+            showAlert('Please enter the secret or text to store.');
+            btnCreateVault.disabled = false;
+            btnCreateText.textContent = 'Encrypt & Generate Link';
+            return;
+          }
+
+          const textRes = await fetch('/api/files', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: 'text', content }),
+          });
+
+          const textData = await textRes.json();
+          if (!textRes.ok) {
+            throw new Error(textData.error || 'Failed to store secret text');
+          }
+          fileId = textData.fileId;
+          shareType = 'text';
+        }
+
+        // Step 2: Create Share Token
+        btnCreateText.textContent = 'Generating Access Token...';
+        const ttl = ttlSelect.value ? parseInt(ttlSelect.value, 10) : null;
+        const oneTime = oneTimeCheck.checked;
+
+        const sharePayload = {
+          fileId,
+          type: shareType,
+          oneTime,
+        };
+        if (ttl) {
+          sharePayload.expiresIn = ttl;
+        }
+
+        const shareRes = await fetch('/api/shares', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(sharePayload),
+        });
+
+        const shareData = await shareRes.json();
+        if (!shareRes.ok) {
+          throw new Error(shareData.error || 'Failed to generate share link');
+        }
+
+        // Display results
+        const origin = window.location.origin;
+        const directUrl = `${origin}${shareData.shareUrl}`;
+        const webAccessUrl = `${origin}/access.html?code=${shareData.shortCode}`;
+        const curlCmd = `curl -fOJ ${directUrl}`;
+
+        resultShareUrl.textContent = directUrl;
+        resultAccessUrl.textContent = webAccessUrl;
+        resultCurlCommand.textContent = curlCmd;
+
+        if (shareData.oneTime) {
+          resultBurnBadge.textContent = 'One-Time Burn';
+          resultBurnBadge.className = 'status-tag burn';
+        } else {
+          resultBurnBadge.textContent = 'Multi-Access';
+          resultBurnBadge.className = 'status-tag secure';
+        }
+
+        if (shareData.expiresAt) {
+          const expiryDate = new Date(shareData.expiresAt);
+          resultExpiresMeta.textContent = `Expires: ${expiryDate.toLocaleString()}`;
+        } else {
+          resultExpiresMeta.textContent = 'Expires: Never (until burned/purged)';
+        }
+
+        resultTypeMeta.textContent = `Payload: ${shareData.type}`;
+        resultCard.classList.add('visible');
+        resultCard.scrollIntoView({ behavior: 'smooth' });
+
+      } catch (err) {
+        showAlert(err.message || 'An unexpected error occurred during encryption.');
+      } finally {
+        btnCreateVault.disabled = false;
+        btnCreateText.textContent = 'Encrypt & Generate Link';
+      }
+    });
+
+    // Copy to clipboard helpers
+    function setupCopyBtn(btnId, targetEl) {
+      const btn = document.getElementById(btnId);
+      btn.addEventListener('click', async () => {
+        const textToCopy = targetEl.textContent;
+        try {
+          await navigator.clipboard.writeText(textToCopy);
+          const originalText = btn.textContent;
+          btn.textContent = 'Copied!';
+          btn.classList.add('copied');
+          setTimeout(() => {
+            btn.textContent = originalText;
+            btn.classList.remove('copied');
+          }, 2000);
+        } catch (e) {
+          prompt('Copy to clipboard: Ctrl+C, Enter', textToCopy);
+        }
+      });
+    }
+
+    setupCopyBtn('btnCopyUrl', resultShareUrl);
+    setupCopyBtn('btnCopyAccessUrl', resultAccessUrl);
+    setupCopyBtn('btnCopyCurl', resultCurlCommand);
+  </script>
+</body>
+</html>

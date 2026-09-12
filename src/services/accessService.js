@@ -3,6 +3,8 @@ const { isTokenValidFormat } = require('../utils/tokenGenerator');
 const { getStorageProvider } = require('../storage');
 const { decrypt } = require('../crypto/encryption');
 
+const AppError = require('../utils/AppError');
+
 /**
  * Accesses and decrypts a shared file/secret payload (V0-T11).
  * Validates token validity, expiration, and one-time consumption policies.
@@ -12,33 +14,25 @@ const { decrypt } = require('../crypto/encryption');
  */
 const accessShare = async (shortCode) => {
   if (!shortCode || !isTokenValidFormat(shortCode)) {
-    const error = new Error('Share not found');
-    error.status = 404;
-    throw error;
+    throw AppError.notFound('Share not found');
   }
 
   const share = await Share.findOne({ shortCode }).populate('fileId');
 
   if (!share || !share.fileId) {
-    const error = new Error('Share not found');
-    error.status = 404;
-    throw error;
+    throw AppError.notFound('Share not found');
   }
 
   const now = new Date();
 
   // 1. Check expiration (TTL)
   if (share.expiresAt && now > share.expiresAt) {
-    const error = new Error('Share has expired');
-    error.status = 410;
-    throw error;
+    throw AppError.gone('Share has expired');
   }
 
   // 2. Check one-time access consumption
   if (share.oneTime && share.consumedAt) {
-    const error = new Error('Share has already been consumed');
-    error.status = 410;
-    throw error;
+    throw AppError.gone('Share has already been consumed');
   }
 
   const file = share.fileId;

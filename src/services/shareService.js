@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Share = require('../models/Share');
 const File = require('../models/File');
 const { generateShareToken } = require('../utils/tokenGenerator');
+const AppError = require('../utils/AppError');
 
 /**
  * Creates an ephemeral share descriptor for an uploaded file or secret (V0-T10).
@@ -15,22 +16,16 @@ const { generateShareToken } = require('../utils/tokenGenerator');
  */
 const createShare = async ({ fileId, oneTime = false, expiresIn, type }) => {
   if (!fileId) {
-    const error = new Error('fileId is required');
-    error.status = 400;
-    throw error;
+    throw AppError.badRequest('fileId is required');
   }
 
   if (!mongoose.Types.ObjectId.isValid(fileId)) {
-    const error = new Error('File not found');
-    error.status = 404;
-    throw error;
+    throw AppError.notFound('File not found');
   }
 
   const fileDoc = await File.findById(fileId);
   if (!fileDoc) {
-    const error = new Error('File not found');
-    error.status = 404;
-    throw error;
+    throw AppError.notFound('File not found');
   }
 
   // Determine share type (infer from file if not explicitly supplied)
@@ -47,9 +42,7 @@ const createShare = async ({ fileId, oneTime = false, expiresIn, type }) => {
   if (expiresIn !== undefined && expiresIn !== null) {
     const seconds = Number(expiresIn);
     if (isNaN(seconds) || seconds <= 0) {
-      const error = new Error('expiresIn must be a positive number of seconds');
-      error.status = 400;
-      throw error;
+      throw AppError.badRequest('expiresIn must be a positive number of seconds');
     }
     expiresAt = new Date(Date.now() + seconds * 1000);
   }

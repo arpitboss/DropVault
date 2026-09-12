@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DropVault — Secret Retrieval</title>
+  <meta name="description" content="Decrypt and retrieve ephemeral secrets and files from DropVault.">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <div class="header-container">
+      <a href="/" class="brand">
+        <div class="brand-icon">⚿</div>
+        <span class="brand-title">DropVault</span>
+        <span class="brand-badge">AES-256-GCM</span>
+      </a>
+      <div class="header-links">
+        <a href="/" class="nav-link">+ New Secret</a>
+        <a href="/health" target="_blank" class="nav-link">System Health</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <h1>Decrypt & Retrieve</h1>
+      <p>Enter the vault access token or short code to decrypt and retrieve your ephemeral secret or file.</p>
+    </section>
+
+    <!-- Error / Info Alert -->
+    <div id="alertBox" class="alert" role="alert"></div>
+
+    <!-- Token Retrieval Box -->
+    <section class="access-card">
+      <div style="margin-bottom: 16px;">
+        <label for="tokenInput" class="option-label" style="display: block; margin-bottom: 6px; font-weight: 500;">Access Token / Short Code:</label>
+        <div style="display: flex; gap: 10px;">
+          <input type="text" id="tokenInput" class="secret-textarea" style="height: 42px; padding: 8px 12px; font-size: 14px;" placeholder="e.g. 5e0b67ff9b97a2..." autocomplete="off" spellcheck="false">
+          <button type="button" id="btnRetrieve" class="btn-primary" style="flex-shrink: 0;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            <span id="btnRetrieveText">Decrypt Secret</span>
+          </button>
+        </div>
+      </div>
+      <p style="font-size: 12px; color: var(--text-muted); font-family: var(--font-mono);">
+        * Note: If this vault link was configured as "Burn after reading", decrypting it now will permanently destroy it from the server.
+      </p>
+    </section>
+
+    <!-- Retrieved Secret Presentation -->
+    <section id="contentCard" class="result-card" style="border-left-color: var(--accent);">
+      <div class="result-header">
+        <div class="result-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          Decrypted Content
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <span id="contentTypeTag" class="status-tag secure">TEXT</span>
+          <span id="contentSizeTag" class="status-tag burn">0 KB</span>
+        </div>
+      </div>
+
+      <!-- Text Content View -->
+      <div id="textSection" style="display: none;">
+        <div class="secret-view-box" id="secretDisplay"></div>
+        <div style="margin-top: 14px; display: flex; gap: 10px; justify-content: flex-end;">
+          <button type="button" id="btnCopySecret" class="btn-copy" style="margin: 0; padding: 7px 16px;">Copy Secret</button>
+          <button type="button" id="btnDownloadText" class="btn-primary" style="padding: 7px 16px;">Download as File</button>
+        </div>
+      </div>
+
+      <!-- Binary File View -->
+      <div id="fileSection" style="display: none; padding: 10px 0;">
+        <p style="color: var(--text-primary); font-size: 14px; margin-bottom: 12px;">
+          Binary file decrypted successfully: <strong id="fileNameDisplay" style="font-family: var(--font-mono);">filename.bin</strong>
+        </p>
+        <button type="button" id="btnDownloadFile" class="btn-primary">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          Download File
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    DropVault v0.1 • Zero-Knowledge Architecture • Clean Ephemeral Storage
+  </footer>
+
+  <script>
+    const tokenInput = document.getElementById('tokenInput');
+    const btnRetrieve = document.getElementById('btnRetrieve');
+    const btnRetrieveText = document.getElementById('btnRetrieveText');
+    const alertBox = document.getElementById('alertBox');
+    const contentCard = document.getElementById('contentCard');
+    const textSection = document.getElementById('textSection');
+    const fileSection = document.getElementById('fileSection');
+    const secretDisplay = document.getElementById('secretDisplay');
+    const contentTypeTag = document.getElementById('contentTypeTag');
+    const contentSizeTag = document.getElementById('contentSizeTag');
+    const fileNameDisplay = document.getElementById('fileNameDisplay');
+    const btnCopySecret = document.getElementById('btnCopySecret');
+    const btnDownloadText = document.getElementById('btnDownloadText');
+    const btnDownloadFile = document.getElementById('btnDownloadFile');
+
+    let currentBlob = null;
+    let currentFileName = 'secret.txt';
+
+    function showAlert(message, type = 'danger') {
+      alertBox.textContent = message;
+      alertBox.className = `alert alert-${type} visible`;
+      alertBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function clearAlert() {
+      alertBox.className = 'alert';
+      alertBox.textContent = '';
+    }
+
+    function formatBytes(bytes) {
+      if (!bytes || bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    async function retrieveSecret(code) {
+      if (!code) {
+        showAlert('Please enter an access token or short code.');
+        return;
+      }
+
+      clearAlert();
+      contentCard.classList.remove('visible');
+      textSection.style.display = 'none';
+      fileSection.style.display = 'none';
+
+      btnRetrieve.disabled = true;
+      btnRetrieveText.textContent = 'Decrypting...';
+
+      try {
+        const response = await fetch(`/s/${encodeURIComponent(code)}`);
+
+        if (!response.ok) {
+          let errMsg = 'Failed to retrieve secret.';
+          try {
+            const errData = await response.json();
+            errMsg = errData.error || errMsg;
+          } catch (_) {
+            if (response.status === 410) {
+              errMsg = 'This secret has expired or has already been burned.';
+            } else if (response.status === 404) {
+              errMsg = 'Secret not found. The code may be invalid or mistyped.';
+            }
+          }
+          throw new Error(errMsg);
+        }
+
+        const contentType = response.headers.get('content-type') || 'application/octet-stream';
+        const disposition = response.headers.get('content-disposition') || '';
+        let fileName = 'downloaded-file';
+        const match = disposition.match(/filename="?([^"]+)"?/);
+        if (match && match[1]) {
+          fileName = match[1];
+        }
+        currentFileName = fileName;
+
+        const blob = await response.blob();
+        currentBlob = blob;
+        contentSizeTag.textContent = formatBytes(blob.size);
+
+        if (contentType.startsWith('text/') || contentType === 'application/json') {
+          const text = await blob.text();
+          secretDisplay.textContent = text;
+          contentTypeTag.textContent = 'TEXT / SECRET';
+          textSection.style.display = 'block';
+        } else {
+          contentTypeTag.textContent = contentType.toUpperCase();
+          fileNameDisplay.textContent = `${fileName} (${formatBytes(blob.size)})`;
+          fileSection.style.display = 'block';
+        }
+
+        contentCard.classList.add('visible');
+        contentCard.scrollIntoView({ behavior: 'smooth' });
+
+      } catch (err) {
+        showAlert(err.message || 'Error fetching vault record.');
+      } finally {
+        btnRetrieve.disabled = false;
+        btnRetrieveText.textContent = 'Decrypt Secret';
+      }
+    }
+
+    btnRetrieve.addEventListener('click', () => {
+      const code = tokenInput.value.trim();
+      retrieveSecret(code);
+    });
+
+    tokenInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        retrieveSecret(tokenInput.value.trim());
+      }
+    });
+
+    // Auto-detect ?code= query param
+    window.addEventListener('DOMContentLoaded', () => {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
+      if (code) {
+        tokenInput.value = code;
+        retrieveSecret(code);
+      }
+    });
+
+    // Copy secret button
+    btnCopySecret.addEventListener('click', async () => {
+      const text = secretDisplay.textContent;
+      try {
+        await navigator.clipboard.writeText(text);
+        const orig = btnCopySecret.textContent;
+        btnCopySecret.textContent = 'Copied!';
+        setTimeout(() => { btnCopySecret.textContent = orig; }, 2000);
+      } catch (e) {
+        prompt('Copy secret: Ctrl+C, Enter', text);
+      }
+    });
+
+    // Download helpers
+    function triggerDownload(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    btnDownloadText.addEventListener('click', () => {
+      if (currentBlob) {
+        triggerDownload(currentBlob, currentFileName.endsWith('.txt') ? currentFileName : `${currentFileName}.txt`);
+      }
+    });
+
+    btnDownloadFile.addEventListener('click', () => {
+      if (currentBlob) {
+        triggerDownload(currentBlob, currentFileName);
+      }
+    });
+  </script>
+</body>
+</html>
