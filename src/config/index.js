@@ -11,6 +11,7 @@ const config = {
   masterEncryptionKey: process.env.MASTER_ENCRYPTION_KEY || '',
   uploadDir: path.resolve(process.cwd(), process.env.UPLOAD_DIR || 'uploads'),
   maxFileSize: parseInt(process.env.MAX_FILE_SIZE, 10) || 50 * 1024 * 1024,
+  maxTextSize: parseInt(process.env.MAX_TEXT_SIZE, 10) || 1 * 1024 * 1024,
 };
 
 module.exports = Object.freeze(config);
