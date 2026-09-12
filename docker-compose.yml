@@ -1,0 +1,31 @@
+services:
+  app:
+    build: .
+    container_name: dropvault-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=development
+      - MONGODB_URI=mongodb://mongo:27017/dropvault
+      - MASTER_ENCRYPTION_KEY=c3dde2cf21e83b288fa39d1d3af705b882234c5715be63aa1f074da0d0c7185a
+      - UPLOAD_DIR=/app/uploads
+      - MAX_FILE_SIZE=52428800
+    depends_on:
+      - mongo
+    volumes:
+      - app-uploads:/app/uploads
+
+  mongo:
+    image: mongo:7
+    container_name: dropvault-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
+volumes:
+  mongo-data:
+  app-uploads:
