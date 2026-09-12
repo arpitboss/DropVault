@@ -1,31 +1,58 @@
 services:
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: dropvault-app
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "${PORT:-3000}:3000"
     environment:
       - PORT=3000
-      - NODE_ENV=development
-      - MONGODB_URI=mongodb://mongo:27017/dropvault
-      - MASTER_ENCRYPTION_KEY=c3dde2cf21e83b288fa39d1d3af705b882234c5715be63aa1f074da0d0c7185a
+      - NODE_ENV=${NODE_ENV:-development}
+      - MONGODB_URI=${MONGODB_URI:-mongodb://mongo:27017/dropvault}
+      - MASTER_ENCRYPTION_KEY=${MASTER_ENCRYPTION_KEY:-c3dde2cf21e83b288fa39d1d3af705b882234c5715be63aa1f074da0d0c7185a}
       - UPLOAD_DIR=/app/uploads
-      - MAX_FILE_SIZE=52428800
+      - MAX_FILE_SIZE=${MAX_FILE_SIZE:-52428800}
+      - MAX_TEXT_SIZE=${MAX_TEXT_SIZE:-1048576}
     depends_on:
-      - mongo
+      mongo:
+        condition: service_healthy
     volumes:
       - app-uploads:/app/uploads
+    networks:
+      - dropvault-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
   mongo:
     image: mongo:7
     container_name: dropvault-mongo
     restart: unless-stopped
-    ports:
-      - "27017:27017"
+    # Security: MongoDB is NOT exposed to the host network by default (V0-T14).
+    # It is strictly isolated and accessible only via the internal bridge network.
     volumes:
       - mongo-data:/data/db
+    networks:
+      - dropvault-network
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --eval 'db.adminCommand(\"ping\")' --quiet || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 volumes:
   mongo-data:
+    name: dropvault-mongo-data
   app-uploads:
+    name: dropvault-app-uploads
+
+networks:
+  dropvault-network:
+    name: dropvault-network
+    driver: bridge

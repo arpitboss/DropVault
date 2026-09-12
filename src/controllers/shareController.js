@@ -9,9 +9,7 @@ const createShare = async (req, res, next) => {
     const { fileId, oneTime, expiresIn, type } = req.body || {};
 
     if (!fileId) {
-      return res.status(400).json({
-        error: 'fileId is required',
-      });
+      throw require('../utils/AppError').badRequest('fileId is required');
     }
 
     const result = await shareService.createShare({

@@ -10,3 +10,6 @@ coverage
 .gitignore
 docs
 *.md
+tests
+.idea
+.vscode

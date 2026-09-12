@@ -1,4 +1,5 @@
 const fileService = require('../services/fileService');
+const AppError = require('../utils/AppError');
 
 /**
  * Controller handling file upload and text paste requests (POST /api/files).
@@ -15,9 +16,7 @@ const uploadFile = async (req, res, next) => {
     if (req.body && req.body.type === 'text') {
       const { content } = req.body;
       if (typeof content !== 'string' || content.trim().length === 0) {
-        return res.status(400).json({
-          error: 'Text content cannot be empty',
-        });
+        throw AppError.badRequest('Text content cannot be empty');
       }
 
       const result = await fileService.processTextPaste(content);
@@ -25,9 +24,7 @@ const uploadFile = async (req, res, next) => {
     }
 
     // 3. Missing file payload
-    return res.status(400).json({
-      error: 'No file uploaded',
-    });
+    throw AppError.badRequest('No file uploaded');
   } catch (error) {
     return next(error);
   }
@@ -36,4 +33,3 @@ const uploadFile = async (req, res, next) => {
 module.exports = {
   uploadFile,
 };
-
