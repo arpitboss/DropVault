@@ -4,6 +4,7 @@ const config = require('./config');
 const { getDBStatus, isConnected } = require('./config/db');
 const fileRoutes = require('./routes/fileRoutes');
 const shareRoutes = require('./routes/shareRoutes');
+const { accessShare } = require('./controllers/shareController');
 
 const app = express();
 
@@ -27,6 +28,9 @@ app.get('/health', (req, res) => {
 // API Routes
 app.use('/api/files', fileRoutes);
 app.use('/api/shares', shareRoutes);
+
+// Ephemeral Share Access Endpoint (V0-T11, TOK-5)
+app.get('/s/:shortCode', accessShare);
 
 // Error Handling Middleware (catching Multer limits, body-parser limits, and general errors)
 app.use((err, req, res, next) => {
