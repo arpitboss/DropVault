@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const {
   logger,
   Logger,
@@ -28,11 +29,11 @@ describe('Structured Logging & LOG-2 Sanitization (V0-T13)', () => {
 
   describe('LOG-2 Sensitive Data Sanitization', () => {
     it('should mask 43-character bearer/share tokens', () => {
-      const token = '38oBeXNbSEUbOPAu39uuAMSGhMF7xcI_-9xgtOEmP_c';
+      const token = crypto.randomBytes(32).toString('base64url');
       const masked = maskToken(token);
 
-      expect(masked).toBe('38oBeX...[REDACTED]');
-      expect(masked).not.toContain('AMSGhMF7xcI_');
+      expect(masked).toBe(`${token.slice(0, 6)}...[REDACTED]`);
+      expect(masked).not.toContain(token.slice(6));
     });
 
     it('should mask short secret strings entirely', () => {
@@ -88,11 +89,12 @@ describe('Structured Logging & LOG-2 Sanitization (V0-T13)', () => {
 
   describe('sanitizeUrl in Request Logger (LOG-2)', () => {
     it('should mask full shortCode tokens in URL paths', () => {
-      const rawUrl = '/s/38oBeXNbSEUbOPAu39uuAMSGhMF7xcI_-9xgtOEmP_c';
+      const token = crypto.randomBytes(32).toString('base64url');
+      const rawUrl = `/s/${token}`;
       const cleanUrl = sanitizeUrl(rawUrl);
 
-      expect(cleanUrl).toBe('/s/38oBeX...[REDACTED]');
-      expect(cleanUrl).not.toContain('AMSGhMF7xcI_');
+      expect(cleanUrl).toBe(`/s/${token.slice(0, 6)}...[REDACTED]`);
+      expect(cleanUrl).not.toContain(token.slice(6));
     });
 
     it('should leave non-share routes untouched', () => {
