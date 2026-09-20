@@ -3,6 +3,7 @@ const express = require('express');
 const multer = require('multer');
 const config = require('./config');
 const { getDBStatus, isConnected } = require('./config/db');
+const { getRedisStatus, isRedisConnected } = require('./config/redis');
 const fileRoutes = require('./routes/fileRoutes');
 const shareRoutes = require('./routes/shareRoutes');
 const { accessShare } = require('./controllers/shareController');
@@ -22,15 +23,22 @@ app.use(express.urlencoded({ extended: true }));
 // Serve static UI assets (V0-T12)
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Health check endpoint reporting service & DB status (V0-T01, V0-T02)
+// Health check endpoint reporting service, DB, and Redis status (V0-T01, V0-T02, V1-T01)
 app.get('/health', (req, res) => {
   const dbStatus = getDBStatus();
   const dbOk = isConnected();
+  const redisStatus = getRedisStatus();
+  const redisOk = isRedisConnected();
 
-  res.status(dbOk ? 200 : 503).json({
-    status: dbOk ? 'ok' : 'degraded',
+  const isHealthy = dbOk && redisOk;
+
+  res.status(isHealthy ? 200 : 503).json({
+    status: isHealthy ? 'ok' : 'degraded',
     db: {
       status: dbStatus,
+    },
+    redis: {
+      status: redisStatus,
     },
   });
 });
