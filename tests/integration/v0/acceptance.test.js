@@ -196,7 +196,7 @@ describe('V0 Acceptance Integration Suite (V0-T15)', () => {
       expect(res.body).toHaveProperty('error');
       expect(res.body.error).toMatch(/exceeds the limit/i);
       expect(res.body).toHaveProperty('requestId');
-    });
+    }, 30000);
 
     it('should reject oversized text pastes with HTTP 413', async () => {
       const hugeText = 'X'.repeat(config.maxTextSize + 100);

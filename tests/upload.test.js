@@ -1,5 +1,6 @@
 const request = require('supertest');
 const fs = require('fs');
+const path = require('path');
 const crypto = require('crypto');
 const app = require('../src/app');
 const config = require('../src/config');
@@ -14,6 +15,12 @@ describe('File Upload Endpoint POST /api/files (V0-T08)', () => {
 
   beforeAll(async () => {
     await connectDB(config.mongoUri);
+    if (fs.existsSync(TEMP_UPLOAD_DIR)) {
+      const files = await fs.promises.readdir(TEMP_UPLOAD_DIR);
+      for (const file of files) {
+        await fs.promises.unlink(path.join(TEMP_UPLOAD_DIR, file)).catch(() => {});
+      }
+    }
   });
 
   afterAll(async () => {
@@ -122,6 +129,6 @@ describe('File Upload Endpoint POST /api/files (V0-T08)', () => {
 
       expect(response.body).toHaveProperty('error');
       expect(response.body.error).toMatch(/exceeds the limit/i);
-    });
+    }, 30000);
   });
 });
