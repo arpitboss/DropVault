@@ -11,12 +11,18 @@ const { processFileUpload, processTextPaste } = require('../src/services/fileSer
 const { createShare } = require('../src/services/shareService');
 const { generateShareToken } = require('../src/utils/tokenGenerator');
 
-describe('Share Access & File Download Endpoint GET /s/:shortCode (V0-T11)', () => {
+const RedisMock = require('ioredis-mock');
+const { connectRedis, disconnectRedis, _setClientForTest } = require('../src/config/redis');
+
+describe('Share Access & File Download Endpoint GET /s/:shortCode (V0-T11, V1-T10)', () => {
   const storedNamesToCleanup = [];
   const fileIdsToCleanup = [];
+  let redisMock;
 
   beforeAll(async () => {
     await connectDB(config.mongoUri);
+    redisMock = new RedisMock();
+    await connectRedis(redisMock);
   });
 
   afterAll(async () => {
@@ -26,6 +32,8 @@ describe('Share Access & File Download Endpoint GET /s/:shortCode (V0-T11)', () 
     }
     await Share.deleteMany({ fileId: { $in: fileIdsToCleanup } });
     await File.deleteMany({ _id: { $in: fileIdsToCleanup } });
+    await disconnectRedis();
+    _setClientForTest(null, 'disconnected');
     await disconnectDB();
   });
 
@@ -174,4 +182,234 @@ describe('Share Access & File Download Endpoint GET /s/:shortCode (V0-T11)', () 
       expect(response.body).toHaveProperty('error', 'Share not found');
     });
   });
+
+  describe('V1-T10 Access Policy Enforcement', () => {
+    describe('Password Protection Policies', () => {
+      let passwordFile;
+      let passwordShare;
+      const secretContent = 'TOP SECRET VAULT DATA 12345';
+      const sharePassword = 'VaultAccessPassword2026!';
+
+      beforeAll(async () => {
+        const fileDesc = await processTextPaste(secretContent);
+        fileIdsToCleanup.push(fileDesc.fileId);
+        passwordFile = await File.findById(fileDesc.fileId);
+        storedNamesToCleanup.push(passwordFile.storedName);
+
+        passwordShare = await createShare({
+          fileId: fileDesc.fileId,
+          password: sharePassword,
+        });
+      });
+
+      it('should return 403 Forbidden with "Password required" when accessing without password', async () => {
+        const response = await request(app)
+          .get(`/s/${passwordShare.shortCode}`)
+          .expect(403);
+
+        expect(response.body).toHaveProperty('error', 'Password required');
+      });
+
+      it('should return 403 Forbidden with "Invalid password" when given an incorrect password', async () => {
+        const response = await request(app)
+          .get(`/s/${passwordShare.shortCode}`)
+          .set('X-Share-Password', 'WrongPass123!')
+          .expect(403);
+
+        expect(response.body).toHaveProperty('error', 'Invalid password');
+      });
+
+      it('should successfully download and decrypt when provided correct password in X-Share-Password header', async () => {
+        const response = await request(app)
+          .get(`/s/${passwordShare.shortCode}`)
+          .set('X-Share-Password', sharePassword)
+          .expect(200);
+
+        const text = response.text || response.body.toString('utf8');
+        expect(text).toBe(secretContent);
+      });
+
+      it('should successfully download when provided correct password in query parameter', async () => {
+        const response = await request(app)
+          .get(`/s/${passwordShare.shortCode}?password=${encodeURIComponent(sharePassword)}`)
+          .expect(200);
+
+        const text = response.text || response.body.toString('utf8');
+        expect(text).toBe(secretContent);
+      });
+
+      it('should successfully download when provided correct password in POST body', async () => {
+        const response = await request(app)
+          .post(`/s/${passwordShare.shortCode}`)
+          .send({ password: sharePassword })
+          .expect(200);
+
+        const text = response.text || response.body.toString('utf8');
+        expect(text).toBe(secretContent);
+      });
+
+      it('should verify correct password on POST /s/:shortCode/verify without downloading', async () => {
+        const response = await request(app)
+          .post(`/s/${passwordShare.shortCode}/verify`)
+          .send({ password: sharePassword })
+          .expect(200);
+
+        expect(response.body).toEqual({ valid: true, verified: true });
+      });
+
+      it('should reject wrong password on POST /s/:shortCode/verify with 403', async () => {
+        const response = await request(app)
+          .post(`/s/${passwordShare.shortCode}/verify`)
+          .send({ password: 'IncorrectPassword' })
+          .expect(403);
+
+        expect(response.body).toHaveProperty('error', 'Invalid password');
+      });
+    });
+
+    describe('IP Filtering Policies (ipAllow & ipDeny)', () => {
+      it('should reject access from an IP listed in ipDeny with 403', async () => {
+        const fileDesc = await processTextPaste('IP DENY SECRET');
+        fileIdsToCleanup.push(fileDesc.fileId);
+        const fileDoc = await File.findById(fileDesc.fileId);
+        storedNamesToCleanup.push(fileDoc.storedName);
+
+        const share = await createShare({
+          fileId: fileDesc.fileId,
+          ipDeny: ['203.0.113.5', '198.51.100.0/24'],
+        });
+
+        // Test exact blocked IP
+        const res1 = await request(app)
+          .get(`/s/${share.shortCode}`)
+          .set('X-Forwarded-For', '203.0.113.5')
+          .expect(403);
+        expect(res1.body).toHaveProperty('error', 'Access denied by IP policy');
+
+        // Test CIDR blocked IP
+        const res2 = await request(app)
+          .get(`/s/${share.shortCode}`)
+          .set('X-Forwarded-For', '198.51.100.42')
+          .expect(403);
+        expect(res2.body).toHaveProperty('error', 'Access denied by IP policy');
+
+        // Allowed IP
+        const res3 = await request(app)
+          .get(`/s/${share.shortCode}`)
+          .set('X-Forwarded-For', '10.0.0.1')
+          .expect(200);
+        expect(res3.text).toBe('IP DENY SECRET');
+      });
+
+      it('should only allow access from IPs matching ipAllow list', async () => {
+        const fileDesc = await processTextPaste('IP ALLOW SECRET');
+        fileIdsToCleanup.push(fileDesc.fileId);
+        const fileDoc = await File.findById(fileDesc.fileId);
+        storedNamesToCleanup.push(fileDoc.storedName);
+
+        const share = await createShare({
+          fileId: fileDesc.fileId,
+          ipAllow: ['192.168.1.0/24', '10.5.5.5'],
+        });
+
+        // Matching CIDR -> allowed
+        const res1 = await request(app)
+          .get(`/s/${share.shortCode}`)
+          .set('X-Forwarded-For', '192.168.1.88')
+          .expect(200);
+        expect(res1.text).toBe('IP ALLOW SECRET');
+
+        // Non-matching IP -> blocked 403
+        const res2 = await request(app)
+          .get(`/s/${share.shortCode}`)
+          .set('X-Forwarded-For', '172.16.0.1')
+          .expect(403);
+        expect(res2.body).toHaveProperty('error', 'Access denied by IP policy');
+      });
+    });
+
+    describe('Share Revocation Policy', () => {
+      it('should return 410 Gone when share has been revoked (revokedAt is set)', async () => {
+        const fileDesc = await processTextPaste('REVOCATION TEST DATA');
+        fileIdsToCleanup.push(fileDesc.fileId);
+        const fileDoc = await File.findById(fileDesc.fileId);
+        storedNamesToCleanup.push(fileDoc.storedName);
+
+        const share = await createShare({ fileId: fileDesc.fileId });
+
+        // Revoke the share
+        await Share.updateOne(
+          { shortCode: share.shortCode },
+          { revokedAt: new Date() }
+        );
+
+        const response = await request(app)
+          .get(`/s/${share.shortCode}`)
+          .expect(410);
+
+        expect(response.body).toHaveProperty('error', 'Share has been revoked');
+      });
+    });
+
+    describe('Download Limit Policy (maxDownloads)', () => {
+      it('should enforce maxDownloads limit and return 410 Gone once limit is exhausted', async () => {
+        const fileDesc = await processTextPaste('LIMITED DOWNLOAD SECRET');
+        fileIdsToCleanup.push(fileDesc.fileId);
+        const fileDoc = await File.findById(fileDesc.fileId);
+        storedNamesToCleanup.push(fileDoc.storedName);
+
+        const share = await createShare({
+          fileId: fileDesc.fileId,
+          maxDownloads: 2,
+        });
+
+        // 1st download -> 200
+        const res1 = await request(app)
+          .get(`/s/${share.shortCode}`)
+          .expect(200);
+        expect(res1.text).toBe('LIMITED DOWNLOAD SECRET');
+
+        // 2nd download -> 200
+        const res2 = await request(app)
+          .get(`/s/${share.shortCode}`)
+          .expect(200);
+        expect(res2.text).toBe('LIMITED DOWNLOAD SECRET');
+
+        // 3rd download -> 410 Gone (exhausted)
+        const res3 = await request(app)
+          .get(`/s/${share.shortCode}`)
+          .expect(410);
+        expect(res3.body).toHaveProperty('error', 'Download limit has been reached for this share');
+      });
+    });
+
+    describe('Concurrency Guarantees (CON-1, CON-2)', () => {
+      it('should ensure exactly ONE winner when multiple HTTP requests race for a one-time share', async () => {
+        const fileDesc = await processTextPaste('CONCURRENCY RACE SECRET');
+        fileIdsToCleanup.push(fileDesc.fileId);
+        const fileDoc = await File.findById(fileDesc.fileId);
+        storedNamesToCleanup.push(fileDoc.storedName);
+
+        const share = await createShare({
+          fileId: fileDesc.fileId,
+          oneTime: true,
+        });
+
+        // Fire 10 concurrent HTTP requests
+        const requests = Array.from({ length: 10 }, () =>
+          request(app).get(`/s/${share.shortCode}`)
+        );
+
+        const responses = await Promise.all(requests);
+
+        const successes = responses.filter((res) => res.status === 200);
+        const gones = responses.filter((res) => res.status === 410);
+
+        expect(successes).toHaveLength(1);
+        expect(gones).toHaveLength(9);
+        expect(successes[0].text).toBe('CONCURRENCY RACE SECRET');
+      });
+    });
+  });
 });
+

@@ -66,6 +66,17 @@ const fileSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+    /**
+     * Optional reference to the user who uploaded this file (dual-mode architecture, V1-T07).
+     * - null for anonymous uploads (no login required)
+     * - ObjectId for authenticated uploads (enables file management, listing, deletion)
+     */
+    ownerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+      index: true,
+    },
     expiresAt: {
       type: Date,
       default: null,

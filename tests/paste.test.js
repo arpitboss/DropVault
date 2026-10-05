@@ -8,6 +8,7 @@ const { decrypt } = require('../src/crypto/encryption');
 
 describe('Text Paste Endpoint POST /api/files (V0-T09)', () => {
   const storedNamesToCleanup = [];
+  const fileIdsToCleanup = [];
 
   beforeAll(async () => {
     await connectDB(config.mongoUri);
@@ -18,7 +19,7 @@ describe('Text Paste Endpoint POST /api/files (V0-T09)', () => {
     for (const storedName of storedNamesToCleanup) {
       await storageProvider.delete(storedName).catch(() => {});
     }
-    await File.deleteMany({ originalName: /^paste-/ });
+    await File.deleteMany({ _id: { $in: fileIdsToCleanup } });
     await disconnectDB();
   });
 
@@ -45,6 +46,7 @@ describe('Text Paste Endpoint POST /api/files (V0-T09)', () => {
       expect(response.body).toHaveProperty('createdAt');
 
       const { fileId } = response.body;
+      fileIdsToCleanup.push(fileId);
 
       // Verify MongoDB document
       const fileDoc = await File.findById(fileId);
@@ -93,6 +95,7 @@ describe('Text Paste Endpoint POST /api/files (V0-T09)', () => {
         })
         .expect(201);
 
+      fileIdsToCleanup.push(response.body.fileId);
       const fileDoc = await File.findById(response.body.fileId);
       expect(fileDoc).not.toBeNull();
       storedNamesToCleanup.push(fileDoc.storedName);

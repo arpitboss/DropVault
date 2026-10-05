@@ -6,7 +6,8 @@ const { getDBStatus, isConnected } = require('./config/db');
 const { getRedisStatus, isRedisConnected } = require('./config/redis');
 const fileRoutes = require('./routes/fileRoutes');
 const shareRoutes = require('./routes/shareRoutes');
-const { accessShare } = require('./controllers/shareController');
+const { accessShare, verifySharePassword } = require('./controllers/shareController');
+const { shareRateLimiter } = require('./middleware/rateLimiter');
 
 const { requestLogger } = require('./middleware/requestLogger');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
@@ -47,8 +48,10 @@ app.get('/health', (req, res) => {
 app.use('/api/files', fileRoutes);
 app.use('/api/shares', shareRoutes);
 
-// Ephemeral Share Access Endpoint (V0-T11, TOK-5)
-app.get('/s/:shortCode', accessShare);
+// Ephemeral Share Access Endpoints (V0-T11, V1-T10, V1-T13, TOK-5)
+app.get('/s/:shortCode', shareRateLimiter, accessShare);
+app.post('/s/:shortCode', shareRateLimiter, accessShare);
+app.post('/s/:shortCode/verify', shareRateLimiter, verifySharePassword);
 
 // 404 handler for undefined routes (V0-T13)
 app.use(notFoundHandler);

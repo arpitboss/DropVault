@@ -10,12 +10,12 @@ describe('File Model Schema & Validation (V0-T05)', () => {
   });
 
   afterAll(async () => {
-    await File.deleteMany({ originalName: /^test-file-/ });
+    await File.deleteMany({ originalName: /^test-file-model-/ });
     await disconnectDB();
   });
 
   const getValidPayload = () => ({
-    originalName: 'test-file-sample.txt',
+    originalName: 'test-file-model-sample.txt',
     storedName: `test-stored-${Date.now()}-${Math.random().toString(36).substring(7)}`,
     size: 1024,
     mimeType: 'text/plain',

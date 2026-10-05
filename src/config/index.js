@@ -16,6 +16,17 @@ const config = {
   redisPort: parseInt(process.env.REDIS_PORT, 10) || 6379,
   redisPassword: process.env.REDIS_PASSWORD || undefined,
   redisUrl: process.env.REDIS_URL || undefined,
+  rateLimit: {
+    enabled: process.env.RATE_LIMIT_ENABLED !== 'false',
+    strictLimit: parseInt(process.env.RATE_LIMIT_STRICT_MAX, 10) || 5,
+    strictWindow: parseInt(process.env.RATE_LIMIT_STRICT_WINDOW, 10) || 60,
+    uploadLimit: parseInt(process.env.RATE_LIMIT_UPLOAD_MAX, 10) || 20,
+    uploadWindow: parseInt(process.env.RATE_LIMIT_UPLOAD_WINDOW, 10) || 60,
+    shareLimit: parseInt(process.env.RATE_LIMIT_SHARE_MAX, 10) || 60,
+    shareWindow: parseInt(process.env.RATE_LIMIT_SHARE_WINDOW, 10) || 60,
+    globalLimit: parseInt(process.env.RATE_LIMIT_GLOBAL_MAX, 10) || 120,
+    globalWindow: parseInt(process.env.RATE_LIMIT_GLOBAL_WINDOW, 10) || 60,
+  },
 };
 
 module.exports = Object.freeze(config);
