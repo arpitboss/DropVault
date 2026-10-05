@@ -123,6 +123,8 @@ const initShareState = async ({
  * @param {string} shareId
  * @returns {Promise<boolean>} true if successfully consumed; false if already consumed or expired
  */
+let isNativeGetdelSupported = null;
+
 const consumeOneTime = async (shareId) => {
   if (!shareId || typeof shareId !== 'string') {
     throw AppError.badRequest('shareId is required');
@@ -132,14 +134,24 @@ const consumeOneTime = async (shareId) => {
   const activeKey = getActiveKey(shareId);
 
   let priorValue;
-  if (typeof client.getdel === 'function') {
-    priorValue = await client.getdel(activeKey);
-  } else {
+  if (isNativeGetdelSupported === false) {
     priorValue = await client.eval(GETDEL_LUA, 1, activeKey);
+  } else {
+    try {
+      priorValue = await client.getdel(activeKey);
+      isNativeGetdelSupported = true;
+    } catch (err) {
+      if (err && err.message && err.message.toLowerCase().includes('unknown command')) {
+        isNativeGetdelSupported = false;
+        priorValue = await client.eval(GETDEL_LUA, 1, activeKey);
+      } else {
+        throw err;
+      }
+    }
   }
 
   // Returns true only if key existed and was set to '1'
-  return priorValue === '1';
+  return priorValue === '1' || priorValue === 1;
 };
 
 /**
